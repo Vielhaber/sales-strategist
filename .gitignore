@@ -1,0 +1,7 @@
+# Server-side secret store - never commit your Gemini API key
+.gemini_config.json
+
+# OS/editor cruft
+.DS_Store
+__pycache__/
+*.pyc
