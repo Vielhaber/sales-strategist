@@ -455,6 +455,9 @@
               <button class="tab-btn" data-target="panel-crm" id="tab-crm">
                 <i data-lucide="users"></i> 6. Leads & CRM
               </button>
+              <button class="tab-btn" data-target="panel-landingpage" id="tab-landingpage">
+                <i data-lucide="layout-template"></i> 7. Landingpage
+              </button>
             </nav>
             
             <!-- Panel 1: Bedarf & Pain Points -->
@@ -838,7 +841,94 @@
                 </table>
               </div>
             </div> <!-- /panel-crm -->
-            
+
+            <!-- Panel 7: KI-Landingpage-Generator -->
+            <div class="glass-card tab-panel" id="panel-landingpage">
+              <div style="border-bottom: 1px solid var(--border-color); padding-bottom: 1rem; margin-bottom: 1.5rem;">
+                <h3 style="font-size: 1.25rem; color: var(--text-main); display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+                  <i data-lucide="layout-template"></i> KI-Landingpage-Generator
+                </h3>
+                <p style="color: var(--text-muted); font-size: 0.85rem;">
+                  Beschreibe dein Produkt und deinen Stil - die KI baut daraus eine fertige, funktionsfähige Landingpage (eine einzelne HTML-Datei), die du direkt als GitHub-Pages-Seite hochladen kannst.
+                </p>
+              </div>
+
+              <form id="landingpage-form">
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.85rem; margin-bottom: 0.85rem;">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="lp-product-name">Firmen-/Produktname</label>
+                    <input type="text" id="lp-product-name" class="form-input" placeholder="z. B. OrbitAI Sales">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="lp-style">Design-Stil</label>
+                    <select id="lp-style" class="form-input">
+                      <option value="modern-minimal">Modern & minimalistisch</option>
+                      <option value="corporate">Seriös & corporate</option>
+                      <option value="bold">Verspielt & auffällig</option>
+                      <option value="dark-premium">Dunkel & premium</option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label for="lp-cta">Haupt-Call-to-Action</label>
+                    <input type="text" id="lp-cta" class="form-input" placeholder="z. B. Jetzt kostenlos testen">
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="lp-prompt">Beschreibung / Prompt <span style="color: var(--text-dim); font-weight: 400;">(was macht das Produkt, für wen, welche Vorteile/Features sollen rein?)</span></label>
+                  <textarea id="lp-prompt" class="form-input" rows="4" placeholder="z. B. Landingpage für eine B2B-SaaS-Plattform, die Vertriebsteams automatisch KI-Verkaufsstrategien erstellt. Zielgruppe: Sales-Manager im Mittelstand. Vorteile: Zeitersparnis, höhere Abschlussquote, keine Einrichtung nötig. Bitte mit Hero-Bereich, 3 Feature-Boxen, Testimonial und Preis-Sektion."></textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 0.75rem;">
+                  <button type="button" class="btn btn-outline" id="btn-lp-use-context" style="width: auto; padding: 0.5rem 1rem; font-size: 0.8rem;" title="Firmenname/Produkt aus der aktuellen Analyse übernehmen">
+                    <i data-lucide="clipboard-copy" style="width: 14px; height: 14px;"></i> Aus Analyse übernehmen
+                  </button>
+                  <button type="submit" class="btn btn-primary" id="btn-lp-generate" style="width: auto; padding: 0.5rem 1.5rem; gap: 0.5rem;">
+                    <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i> Landingpage generieren
+                  </button>
+                </div>
+              </form>
+
+              <!-- Loading Indicator -->
+              <div id="lp-loading" style="display: none; align-items: center; justify-content: center; flex-direction: column; padding: 2rem; gap: 0.75rem;">
+                <div class="spinner"></div>
+                <span style="font-size: 0.85rem; color: var(--text-muted);" id="lp-loading-text">Baue deine Landingpage...</span>
+              </div>
+
+              <!-- Result Area -->
+              <div id="lp-result-container" style="display: none; margin-top: 1.5rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem;">
+                  <div class="lp-view-tabs" style="display: flex; gap: 0.5rem;">
+                    <button type="button" class="lp-view-tab-btn active" id="btn-lp-view-preview">
+                      <i data-lucide="eye" style="width: 14px; height: 14px;"></i> Vorschau
+                    </button>
+                    <button type="button" class="lp-view-tab-btn" id="btn-lp-view-code">
+                      <i data-lucide="code" style="width: 14px; height: 14px;"></i> Code
+                    </button>
+                  </div>
+                  <div style="display: flex; gap: 0.5rem;">
+                    <button type="button" class="btn btn-outline" id="btn-lp-copy" style="width: auto; padding: 0.4rem 0.85rem; font-size: 0.8rem; gap: 0.4rem;">
+                      <i data-lucide="copy" style="width: 14px; height: 14px;"></i> Code kopieren
+                    </button>
+                    <button type="button" class="btn btn-primary" id="btn-lp-download" style="width: auto; padding: 0.4rem 0.85rem; font-size: 0.8rem; gap: 0.4rem;">
+                      <i data-lucide="download" style="width: 14px; height: 14px;"></i> Als HTML herunterladen
+                    </button>
+                  </div>
+                </div>
+
+                <p style="font-size: 0.75rem; color: var(--text-dim); margin-bottom: 0.75rem; line-height: 1.4;">
+                  Die Vorschau läuft in einem isolierten Frame (Sandbox) - Skripte der generierten Seite können nicht auf diese App zugreifen. Für GitHub Pages: Datei herunterladen, in dein Repo hochladen und Pages in den Repo-Einstellungen aktivieren.
+                </p>
+
+                <div id="lp-preview-view">
+                  <iframe id="lp-preview-frame" class="landingpage-preview-frame" title="Landingpage-Vorschau" sandbox="allow-scripts"></iframe>
+                </div>
+                <div id="lp-code-view" style="display: none;">
+                  <textarea id="lp-code-output" class="landingpage-code-output" readonly spellcheck="false"></textarea>
+                </div>
+              </div>
+            </div> <!-- /panel-landingpage -->
+
           </div> <!-- /report-container -->
 
           <!-- Chat Assistant Section (Always Visible) -->

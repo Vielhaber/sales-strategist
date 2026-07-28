@@ -403,6 +403,173 @@ export function generateLocalMockData(industry, product) {
   };
 }
 
+// --------------------------------------------------------------------------
+// Landing page generator
+// --------------------------------------------------------------------------
+
+const LP_STYLE_GUIDANCE = {
+  "modern-minimal": "Modern und minimalistisch: viel Weißraum, ein Akzentfarbton (z.B. Indigo/Blau), klare serifenlose Typografie (System-Fonts), dezente Schatten, abgerundete Ecken.",
+  "corporate": "Seriös und corporate: gedeckte Farben (Navy, Grau, ein dezenter Blauton), klare Struktur, vertrauenswürdig wirkend, wenig Spielerei, gut lesbare Absätze.",
+  "bold": "Verspielt und auffällig: kräftiger Farbverlauf (z.B. Lila/Pink oder Orange/Rot), große Headlines, verspielte Icons/Emojis, viel visuelle Energie, aber trotzdem gut lesbar.",
+  "dark-premium": "Dunkel und premium: fast schwarzer Hintergrund, ein edler Akzent (Gold, Cyan oder Violett), hoher Kontrast, hochwertige/minimalistische Icons, Premium-Anmutung.",
+};
+
+/**
+ * Builds the prompt sent to /api/generate for the landing page generator.
+ * Instructs the model to return ONE self-contained HTML document (inline
+ * CSS + vanilla JS only, no external dependencies) so the result can be
+ * dropped straight into a GitHub Pages repo as index.html.
+ */
+export function buildLandingPagePrompt({ productName, style, cta, prompt }) {
+  const styleGuidance = LP_STYLE_GUIDANCE[style] || LP_STYLE_GUIDANCE["modern-minimal"];
+  const name = productName || "das Produkt";
+  const ctaText = cta || "Jetzt starten";
+
+  return `Du bist eine erfahrene Webdesignerin und Frontend-Entwicklerin. Baue eine hochprofessionelle, vollständig funktionsfähige One-Page-Landingpage.
+
+PRODUKT / FIRMA: ${name}
+DESIGN-STIL: ${styleGuidance}
+HAUPT-CALL-TO-ACTION-TEXT: "${ctaText}"
+
+BESCHREIBUNG / ANFORDERUNGEN DES NUTZERS:
+"""
+${prompt || "Erstelle eine überzeugende, generische B2B-SaaS-Landingpage mit Hero-Bereich, Feature-Übersicht, Social Proof und einer klaren Handlungsaufforderung."}
+"""
+
+HARTE TECHNISCHE ANFORDERUNGEN (unbedingt einhalten):
+1. Gib AUSSCHLIESSLICH ein einziges, vollständiges HTML-Dokument zurück, beginnend mit <!DOCTYPE html> und endend mit </html>. Kein Text davor oder danach, keine Markdown-Codeblock-Marker (\`\`\`).
+2. Alles muss in dieser einen Datei enthalten sein: CSS in einem <style>-Tag im <head>, JavaScript (falls nötig, z.B. für ein mobiles Menü oder sanftes Scrollen) in einem <script>-Tag vor </body>. Keine externen Stylesheets, Frameworks oder CDN-Links (kein Tailwind-CDN, kein Bootstrap, keine Google Fonts-Links) - nutze ausschließlich Systemschriften.
+3. Die Seite muss vollständig responsive sein (Mobile, Tablet, Desktop) mit sauberem CSS (Flexbox/Grid, KEINE externen Bilder/Icon-Fonts - falls Icons gewünscht sind, nutze einfache Inline-SVGs oder Unicode-Symbole/Emojis).
+4. Struktur: Navigation mit Logo/Produktname, Hero-Sektion mit Headline, Subheadline und einem auffälligen CTA-Button ("${ctaText}"), 3-4 Feature-/Vorteils-Boxen, ein Abschnitt mit sozialem Beweis (z.B. ein Testimonial-Zitat oder Kennzahlen), ein abschließender CTA-Bereich, und ein schlichter Footer.
+5. Nutze semantisches HTML (header, main, section, footer), sinnvolle Überschriften-Hierarchie und ausreichend Farbkontrast für Barrierefreiheit.
+6. Alle Buttons/Links dürfen auf "#" oder Anker innerhalb der Seite verweisen, da dies eine eigenständige Demo-Seite ist.
+7. Schreibe alle sichtbaren Texte auf Deutsch, professionell und überzeugend, passend zur Beschreibung oben.`;
+}
+
+/**
+ * Extracts a clean HTML document from a raw model response: strips markdown
+ * code fences if present and trims anything before <!DOCTYPE/<html> or after
+ * </html>, so stray commentary from the model doesn't break the page.
+ */
+export function extractHtmlFromResponse(rawText) {
+  let text = (rawText || "").trim();
+
+  // Strip ``` / ```html fences if the model added them anyway
+  text = text.replace(/^```(?:html)?\s*/i, "").replace(/```\s*$/i, "").trim();
+
+  const startMatch = text.match(/<!DOCTYPE html>|<html[\s>]/i);
+  const start = startMatch ? startMatch.index : 0;
+
+  const endMatch = text.match(/<\/html\s*>/i);
+  const end = endMatch ? endMatch.index + endMatch[0].length : text.length;
+
+  const extracted = text.substring(start, end).trim();
+
+  if (!extracted || !/<html[\s>]/i.test(extracted)) {
+    // Fallback: wrap whatever we got so the preview never shows a blank/broken frame
+    return `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><title>Fehler</title></head><body style="font-family: sans-serif; padding: 2rem; color: #333;"><h2>Die KI-Antwort konnte nicht als HTML-Seite erkannt werden.</h2><pre style="white-space: pre-wrap; background: #f5f5f5; padding: 1rem; border-radius: 6px;">${text.replace(/</g, "&lt;")}</pre></body></html>`;
+  }
+
+  return extracted;
+}
+
+const LP_MOCK_PALETTES = {
+  "modern-minimal": { bg: "#ffffff", text: "#1a1a2e", accent: "#4f46e5", accentText: "#ffffff", muted: "#6b7280", surface: "#f5f6fb" },
+  "corporate": { bg: "#ffffff", text: "#1f2937", accent: "#1d4ed8", accentText: "#ffffff", muted: "#4b5563", surface: "#f1f5f9" },
+  "bold": { bg: "#1a0b2e", text: "#ffffff", accent: "#ec4899", accentText: "#ffffff", muted: "#d1c4e9", surface: "#2a1250" },
+  "dark-premium": { bg: "#0a0a0a", text: "#f5f5f5", accent: "#d4af37", accentText: "#0a0a0a", muted: "#a3a3a3", surface: "#151515" },
+};
+
+/**
+ * Offline fallback: builds a complete, self-contained landing page HTML
+ * document locally (no API key needed) using the same inputs, so the
+ * feature always produces something usable.
+ */
+export function generateLocalMockLandingPage({ productName, style, cta, prompt }) {
+  const palette = LP_MOCK_PALETTES[style] || LP_MOCK_PALETTES["modern-minimal"];
+  const name = productName || "Dein Produkt";
+  const ctaText = cta || "Jetzt starten";
+  const description = (prompt || "").trim();
+  const subheadline = description
+    ? description.split(/[.\n]/)[0].trim().substring(0, 140)
+    : "Die smarte Lösung für dein Team - schneller, einfacher, effizienter.";
+
+  const features = [
+    { title: "Schnell startklar", text: "In wenigen Minuten eingerichtet, ohne komplizierte Konfiguration." },
+    { title: "Made for Teams", text: "Gebaut für den täglichen Einsatz - intuitiv für dein ganzes Team." },
+    { title: "Messbare Ergebnisse", text: "Transparente Kennzahlen, die den Mehrwert sofort sichtbar machen." },
+  ];
+
+  return `<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${name}</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: ${palette.bg}; color: ${palette.text}; line-height: 1.6; }
+  a { color: inherit; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
+  header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 0; }
+  header .logo { font-weight: 700; font-size: 1.2rem; }
+  nav a { margin-left: 1.5rem; text-decoration: none; color: ${palette.muted}; font-size: 0.9rem; }
+  .btn { display: inline-block; background: ${palette.accent}; color: ${palette.accentText}; padding: 0.85rem 1.75rem; border-radius: 8px; text-decoration: none; font-weight: 600; border: none; cursor: pointer; font-size: 1rem; }
+  .hero { text-align: center; padding: 5rem 0 4rem; }
+  .hero h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; margin-bottom: 1.25rem; }
+  .hero p { font-size: 1.15rem; color: ${palette.muted}; max-width: 640px; margin: 0 auto 2rem; }
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; padding: 3rem 0; }
+  .feature-card { background: ${palette.surface}; border-radius: 12px; padding: 1.75rem; }
+  .feature-card h3 { margin-bottom: 0.5rem; font-size: 1.1rem; }
+  .feature-card p { color: ${palette.muted}; font-size: 0.95rem; }
+  .testimonial { text-align: center; padding: 4rem 1.5rem; background: ${palette.surface}; margin: 2rem 0; border-radius: 16px; }
+  .testimonial blockquote { font-size: 1.3rem; font-style: italic; max-width: 640px; margin: 0 auto 1rem; }
+  .testimonial cite { color: ${palette.muted}; font-size: 0.9rem; }
+  .cta-section { text-align: center; padding: 4rem 0; }
+  .cta-section h2 { font-size: 1.8rem; margin-bottom: 1.5rem; }
+  footer { text-align: center; padding: 2rem 0; color: ${palette.muted}; font-size: 0.85rem; border-top: 1px solid rgba(128,128,128,0.2); }
+  @media (max-width: 600px) { nav { display: none; } }
+</style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo">${name}</div>
+      <nav>
+        <a href="#features">Funktionen</a>
+        <a href="#testimonial">Referenzen</a>
+        <a href="#cta">Kontakt</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <h1>${name}</h1>
+      <p>${subheadline}</p>
+      <a class="btn" href="#cta">${ctaText}</a>
+    </section>
+
+    <section class="features" id="features">
+      ${features.map(f => `<div class="feature-card"><h3>${f.title}</h3><p>${f.text}</p></div>`).join("\n      ")}
+    </section>
+
+    <section class="testimonial" id="testimonial">
+      <blockquote>"Seit wir ${name} einsetzen, sparen wir jede Woche mehrere Stunden Arbeit."</blockquote>
+      <cite>- Zufriedene Kundin</cite>
+    </section>
+
+    <section class="cta-section" id="cta">
+      <h2>Bereit loszulegen?</h2>
+      <a class="btn" href="#">${ctaText}</a>
+    </section>
+
+    <footer>
+      &copy; ${new Date().getFullYear()} ${name}. Alle Rechte vorbehalten. (Offline-Demo-Vorschau)
+    </footer>
+  </div>
+</body>
+</html>`;
+}
+
 export function generateLocalMockLeads(product, region, industry) {
   const cleanProd = product || "Lösung";
   const cleanReg = region || "deine Region";

@@ -1111,6 +1111,59 @@ select.form-input option {
   display: none;
 }
 
+/* Landingpage Generator */
+.lp-view-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.lp-view-tab-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.4rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.15s ease;
+}
+
+.lp-view-tab-btn:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.lp-view-tab-btn.active {
+  color: var(--accent-cyan);
+  background: rgba(0, 242, 254, 0.08);
+}
+
+.landingpage-preview-frame {
+  width: 100%;
+  height: 640px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.landingpage-code-output {
+  width: 100%;
+  height: 640px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--text-main);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  padding: 1rem;
+  resize: vertical;
+}
+
 .email-panel.active {
   display: block;
 }
