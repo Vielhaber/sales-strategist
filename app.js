@@ -134,6 +134,9 @@ function init() {
   const btnResetSettings = document.getElementById("btn-reset-settings");
   const btnSaveSettings = document.getElementById("btn-save-settings");
   const colorHexLabel = document.getElementById("color-hex-label");
+  const btnExportBackup = document.getElementById("btn-export-backup");
+  const btnImportBackup = document.getElementById("btn-import-backup");
+  const backupFileInput = document.getElementById("backup-file-input");
 
   // Chat Assistant DOM Elements
   const btnChatMic = document.getElementById("btn-chat-mic");
@@ -283,6 +286,19 @@ function init() {
     setApiKeyConfigured(!!status.configured);
     if (status.configured) {
       refreshModelOptions();
+    }
+
+    const noBackendBanner = document.getElementById("no-backend-banner");
+    if (noBackendBanner && !status.backendAvailable && !sessionStorage.getItem("hide_no_backend_banner")) {
+      noBackendBanner.style.display = "flex";
+      lucide.createIcons();
+      const dismissBtn = document.getElementById("btn-dismiss-no-backend-banner");
+      if (dismissBtn) {
+        dismissBtn.addEventListener("click", () => {
+          noBackendBanner.style.display = "none";
+          sessionStorage.setItem("hide_no_backend_banner", "true");
+        });
+      }
     }
   })();
 
@@ -1819,6 +1835,96 @@ function init() {
 
       // Go back
       btnBackFromSettings.click();
+    });
+  }
+
+  // --- DATA BACKUP (EXPORT / IMPORT) ---
+  // All app data (campaigns, client directory, leads, branding) lives only in
+  // this browser's localStorage under "sales_*" keys - there is no server-side
+  // database. Clearing site data, switching browsers, or moving to a new
+  // machine loses everything unless it's exported here first.
+
+  const BACKUP_KEY_PREFIX = "sales_";
+
+  function collectBackupData() {
+    const data = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(BACKUP_KEY_PREFIX)) {
+        data[key] = localStorage.getItem(key);
+      }
+    }
+    return data;
+  }
+
+  if (btnExportBackup) {
+    btnExportBackup.addEventListener("click", () => {
+      const backup = {
+        app: "OrbitAI Sales Strategist",
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        data: collectBackupData(),
+      };
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      const dateStr = new Date().toISOString().slice(0, 10);
+      link.download = `orbitai-sales-backup-${dateStr}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    });
+  }
+
+  if (btnImportBackup && backupFileInput) {
+    btnImportBackup.addEventListener("click", () => backupFileInput.click());
+
+    backupFileInput.addEventListener("change", () => {
+      const file = backupFileInput.files && backupFileInput.files[0];
+      if (!file) return;
+
+      if (file.size > 20 * 1024 * 1024) {
+        alert("Diese Datei ist zu groß, um ein gültiges Backup zu sein.");
+        backupFileInput.value = "";
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        backupFileInput.value = ""; // allow re-selecting the same file later
+        let parsed;
+        try {
+          parsed = JSON.parse(String(reader.result));
+        } catch (err) {
+          alert("Diese Datei ist kein gültiges Backup (kein lesbares JSON).");
+          return;
+        }
+
+        const importedData = parsed && typeof parsed.data === "object" ? parsed.data : null;
+        if (!importedData) {
+          alert("Diese Datei sieht nicht wie ein OrbitAI-Sales-Backup aus.");
+          return;
+        }
+
+        const keysToImport = Object.keys(importedData).filter(
+          (key) => key.startsWith(BACKUP_KEY_PREFIX) && typeof importedData[key] === "string"
+        );
+        if (keysToImport.length === 0) {
+          alert("In dieser Datei wurden keine importierbaren Daten gefunden.");
+          return;
+        }
+
+        const confirmed = confirm(
+          `Backup importieren?\n\nDas überschreibt alle aktuell gespeicherten Kampagnen, Kunden, Leads und Branding-Einstellungen in diesem Browser mit dem Stand vom ${parsed.exportedAt ? new Date(parsed.exportedAt).toLocaleString("de-DE") : "unbekannten Zeitpunkt"}. Diese Aktion kann nicht rückgängig gemacht werden.`
+        );
+        if (!confirmed) return;
+
+        keysToImport.forEach((key) => localStorage.setItem(key, importedData[key]));
+        alert("Backup erfolgreich importiert. Die Seite wird jetzt neu geladen.");
+        location.reload();
+      };
+      reader.onerror = () => alert("Datei konnte nicht gelesen werden.");
+      reader.readAsText(file);
     });
   }
 

@@ -13,12 +13,14 @@ server. It still applies basic safety measures (SSRF allowlisting, no secrets
 sent to the client, generic error messages) so it isn't trivially abusable.
 """
 
+import http.client
 import http.server
 import ipaddress
 import json
 import os
 import re
 import socket
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -26,6 +28,17 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 PORT = int(os.environ.get("PORT", "8080"))
+
+# Bind to localhost only by default. This is a single-user local tool that
+# holds a live Gemini key server-side - if it were reachable from the rest
+# of the network, anyone on the same LAN could spend that key's quota via
+# /api/generate or use /api/scrape as an open (SSRF-guarded) relay. Set
+# HOST=0.0.0.0 explicitly if you really want LAN access.
+HOST = os.environ.get("HOST", "127.0.0.1")
+
+# Reject POST bodies larger than this to avoid a trivial memory-exhaustion DoS
+# via a spoofed Content-Length header.
+MAX_BODY_BYTES = 2_000_000
 
 # Where the Gemini key is persisted when the user saves it via the Settings UI.
 # Kept outside of anything that looks like normal site content and explicitly
@@ -64,45 +77,92 @@ def strip_tags(html):
 # --------------------------------------------------------------------------
 # SSRF protection for /api/scrape
 # --------------------------------------------------------------------------
+def _is_blocked_ip(ip):
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
 def is_safe_public_url(url):
-    """Only allow http(s) URLs that resolve to public, non-internal IP addresses."""
+    """Only allow http(s) URLs that resolve to public, non-internal IP addresses.
+
+    Returns (is_safe, error_message_or_None, pinned_ip_or_None). The caller
+    must connect to `pinned_ip` for the actual request instead of letting
+    the HTTP client re-resolve the hostname - otherwise a malicious DNS
+    server could return a safe IP for this check and then a different,
+    internal IP a moment later for the real connection ("DNS rebinding"),
+    bypassing the check entirely.
+    """
     try:
         parsed = urllib.parse.urlparse(url)
     except ValueError:
-        return False, "Ungültige URL."
+        return False, "Ungültige URL.", None
 
     if parsed.scheme not in ("http", "https"):
-        return False, "Nur http:// und https:// URLs sind erlaubt."
+        return False, "Nur http:// und https:// URLs sind erlaubt.", None
 
     hostname = parsed.hostname
     if not hostname:
-        return False, "Ungültige URL."
+        return False, "Ungültige URL.", None
 
     if hostname.lower() in ("localhost",) or hostname.lower().endswith(".local"):
-        return False, "Diese Adresse ist nicht erlaubt."
+        return False, "Diese Adresse ist nicht erlaubt.", None
 
     try:
         addr_infos = socket.getaddrinfo(hostname, None)
     except socket.gaierror:
-        return False, "Host konnte nicht aufgelöst werden."
+        return False, "Host konnte nicht aufgelöst werden.", None
 
+    pinned_ip = None
     for info in addr_infos:
         ip_str = info[4][0]
         try:
             ip = ipaddress.ip_address(ip_str)
         except ValueError:
             continue
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
-            return False, "Diese Adresse ist nicht erlaubt."
+        if _is_blocked_ip(ip):
+            return False, "Diese Adresse ist nicht erlaubt.", None
+        if pinned_ip is None:
+            pinned_ip = ip_str
 
-    return True, None
+    if pinned_ip is None:
+        return False, "Host konnte nicht aufgelöst werden.", None
+
+    return True, None, pinned_ip
+
+
+def _make_pinned_opener(pinned_ip):
+    """Build a urllib opener that connects to `pinned_ip` regardless of what
+    the target hostname resolves to at request time, closing the DNS
+    rebinding gap between validation and the actual request. The Host
+    header / SNI / certificate hostname check still use the real hostname,
+    so normal virtual hosting and TLS validation keep working.
+    """
+
+    class PinnedHTTPConnection(http.client.HTTPConnection):
+        def connect(self):
+            self.sock = socket.create_connection((pinned_ip, self.port), self.timeout)
+
+    class PinnedHTTPSConnection(http.client.HTTPSConnection):
+        def connect(self):
+            sock = socket.create_connection((pinned_ip, self.port), self.timeout)
+            context = self._context or ssl.create_default_context()
+            self.sock = context.wrap_socket(sock, server_hostname=self.host)
+
+    class PinnedHTTPHandler(urllib.request.HTTPHandler):
+        def http_open(self, req):
+            return self.do_open(PinnedHTTPConnection, req)
+
+    class PinnedHTTPSHandler(urllib.request.HTTPSHandler):
+        def https_open(self, req):
+            return self.do_open(PinnedHTTPSConnection, req)
+
+    return urllib.request.build_opener(PinnedHTTPHandler, PinnedHTTPSHandler)
 
 
 # --------------------------------------------------------------------------
@@ -228,10 +288,15 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    class _BodyTooLarge(Exception):
+        pass
+
     def _read_json_body(self):
         length = int(self.headers.get("Content-Length", 0))
         if length <= 0:
             return {}
+        if length > MAX_BODY_BYTES:
+            raise self._BodyTooLarge()
         raw = self.rfile.read(length)
         try:
             return json.loads(raw.decode("utf-8"))
@@ -268,7 +333,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self._send_json(400, {"error": "Missing url parameter"})
             return
 
-        safe, reason = is_safe_public_url(target_url)
+        safe, reason, pinned_ip = is_safe_public_url(target_url)
         if not safe:
             self._send_json(400, {"error": reason})
             return
@@ -283,7 +348,11 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     )
                 },
             )
-            with urllib.request.urlopen(req, timeout=10) as response:
+            # Connect to the exact IP we just validated (see _make_pinned_opener)
+            # instead of letting urllib resolve the hostname again, which would
+            # reopen the DNS-rebinding gap the check above is meant to close.
+            opener = _make_pinned_opener(pinned_ip)
+            with opener.open(req, timeout=10) as response:
                 html_content = response.read(2_000_000).decode("utf-8", errors="ignore")
 
             html_content = re.sub(r"<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>", "", html_content)
@@ -314,24 +383,27 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         parsed_url = urllib.parse.urlparse(self.path)
 
-        if parsed_url.path == "/api/generate":
-            self._handle_generate()
-            return
+        try:
+            if parsed_url.path == "/api/generate":
+                self._handle_generate()
+                return
 
-        if parsed_url.path == "/api/config":
-            self._handle_save_config()
-            return
+            if parsed_url.path == "/api/config":
+                self._handle_save_config()
+                return
 
-        if parsed_url.path == "/api/config/clear":
-            try:
-                clear_api_key()
-                self._send_json(200, {"ok": True})
-            except Exception as e:
-                print(f"[config/clear] failed: {e}")
-                self._send_json(500, {"error": "Konnte den Key nicht entfernen."})
-            return
+            if parsed_url.path == "/api/config/clear":
+                try:
+                    clear_api_key()
+                    self._send_json(200, {"ok": True})
+                except Exception as e:
+                    print(f"[config/clear] failed: {e}")
+                    self._send_json(500, {"error": "Konnte den Key nicht entfernen."})
+                return
 
-        self._send_json(404, {"error": "Not found"})
+            self._send_json(404, {"error": "Not found"})
+        except self._BodyTooLarge:
+            self._send_json(413, {"error": "Anfrage ist zu groß."})
 
     def _handle_generate(self):
         body = self._read_json_body()
@@ -391,8 +463,11 @@ class MyThreadingServer(http.server.ThreadingHTTPServer):
 
 
 if __name__ == "__main__":
-    with MyThreadingServer(("", PORT), CustomHandler) as httpd:
-        print(f"Serving Sales Strategist on http://localhost:{PORT}")
+    with MyThreadingServer((HOST, PORT), CustomHandler) as httpd:
+        print(f"Serving Sales Strategist on http://{'localhost' if HOST in ('127.0.0.1', 'localhost') else HOST}:{PORT}")
+        if HOST not in ("127.0.0.1", "localhost"):
+            print(f"WARNUNG: Server ist auf {HOST} erreichbar, nicht nur von diesem Rechner. "
+                  f"Jeder im selben Netzwerk kann deinen gespeicherten Gemini-Key mitbenutzen.")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

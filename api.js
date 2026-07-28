@@ -14,14 +14,25 @@ async function readJsonSafe(res) {
   }
 }
 
-/** Whether a Gemini key is currently configured on the server. */
+/**
+ * Whether a Gemini key is currently configured on the server, plus whether
+ * a real backend answered at all. On a purely static deployment (e.g. this
+ * app served via GitHub Pages) there is no server.py running /api/*, so the
+ * request either fails outright or a static host returns its generic 404
+ * page instead of JSON - `backendAvailable: false` lets the UI tell the
+ * difference between "no key saved yet" and "no backend to save a key to".
+ */
 export async function apiGetConfigStatus() {
   try {
     const res = await fetch("/api/config/status");
-    if (!res.ok) return { configured: false };
-    return await res.json();
+    if (!res.ok) return { configured: false, backendAvailable: false };
+    const data = await res.json().catch(() => null);
+    if (!data || typeof data.configured !== "boolean") {
+      return { configured: false, backendAvailable: false };
+    }
+    return { configured: data.configured, backendAvailable: true };
   } catch (_) {
-    return { configured: false };
+    return { configured: false, backendAvailable: false };
   }
 }
 

@@ -59,6 +59,12 @@
 </head>
 <body>
 
+  <div id="no-backend-banner" style="display: none;">
+    <i data-lucide="info" style="width: 16px; height: 16px; flex-shrink: 0;"></i>
+    <span>Reiner Demo-Modus: Kein Backend erkannt (z. B. weil diese Seite über GitHub Pages läuft). Alle Berichte laufen offline mit Beispieldaten. Für echte KI-Generierung und Website-Scraping bitte das Repo klonen und lokal <code>python3 server.py</code> starten.</span>
+    <button type="button" id="btn-dismiss-no-backend-banner" aria-label="Hinweis schließen">&times;</button>
+  </div>
+
   <div class="app-container">
     <!-- SIDEBAR: Config & Demos -->
     <aside class="sidebar">      <div class="brand-section">
@@ -398,6 +404,27 @@
                 </div>
               </div>
 
+            </div>
+
+            <!-- Data Backup: all campaign/client/lead data lives only in this browser's
+                 localStorage, so clearing site data or switching devices/browsers loses
+                 it permanently unless it's exported here first. -->
+            <div style="border-top: 1px solid var(--border-color); padding-top: 1.5rem; margin-top: 0.5rem;">
+              <h4 style="font-size: 1.1rem; color: var(--accent-cyan); margin-bottom: 0.5rem; display: flex; align-items: center; gap: 0.5rem;">
+                <i data-lucide="database-backup"></i> Daten-Backup
+              </h4>
+              <p style="color: var(--text-muted); font-size: 0.85rem; margin: 0 0 1rem 0;">
+                Kampagnen, Kundenkartei und Leads werden nur lokal im Browser gespeichert. Beim Löschen der Browserdaten oder auf einem anderen Gerät sind sie sonst weg - hier als Datei sichern oder wiederherstellen.
+              </p>
+              <div style="display: flex; gap: 0.75rem; flex-wrap: wrap;">
+                <button class="btn btn-outline" id="btn-export-backup" style="width: auto; gap: 0.5rem;">
+                  <i data-lucide="download"></i> Backup exportieren (JSON)
+                </button>
+                <button class="btn btn-outline" id="btn-import-backup" style="width: auto; gap: 0.5rem;">
+                  <i data-lucide="upload"></i> Backup importieren
+                </button>
+                <input type="file" id="backup-file-input" accept="application/json" style="display: none;">
+              </div>
             </div>
 
             <div style="display: flex; justify-content: flex-end; gap: 1rem; margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1.5rem;">

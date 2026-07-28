@@ -1302,3 +1302,43 @@ select.form-input option {
     box-shadow: 0 0 15px rgba(239, 68, 68, 0.6);
   }
 }
+
+/* No-Backend Banner - shown when /api/* endpoints are unreachable
+   (e.g. this build is served as static files via GitHub Pages, which
+   cannot run server.py). Lets users know why Live-AI features are
+   silently falling back to the offline demo mode. */
+#no-backend-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: rgba(245, 158, 11, 0.12);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+  color: #f59e0b;
+  font-size: 0.8rem;
+  line-height: 1.4;
+  padding: 0.6rem 1.25rem;
+  position: relative;
+  z-index: 500;
+}
+
+#no-backend-banner code {
+  background: rgba(245, 158, 11, 0.15);
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+#no-backend-banner span {
+  flex: 1;
+}
+
+#btn-dismiss-no-backend-banner {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.25rem;
+  flex-shrink: 0;
+}
