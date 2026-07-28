@@ -297,6 +297,7 @@ Erstelle ein JSON-Array, das ausschließlich passende Firmenobjekte enthält. Je
 - "contact": Ein passender Ansprechpartner (z. B. "Herr Schmidt (Einkaufsleiter)")
 - "email": Eine B2B-Kontakt-E-Mail (z. B. info@firma.de)
 - "phone": Eine plausible Telefonnummer mit der korrekten regionalen Vorwahl für die Region "${region}"
+- "potenzial": Das geschätzte Kaufpotenzial für dieses B2B-Produkt (muss exakt einer dieser drei Strings sein: "Hoch", "Mittel" oder "Gering", basierend auf Schmerzpunkt-Dringlichkeit und Branchenrelevanz)
 - "industry": Die genaue Branche des Unternehmens
 - "website": Die Website (z. B. https://www.firma.de)
 - "notes": Eine aussagekräftige Vertriebsnotiz, warum dieses Unternehmen das Produkt benötigt
@@ -329,6 +330,8 @@ Falls der Nutzer eine Systemaktion wünscht, füge am Ende deiner Textantwort EX
 - [SYSTEM_COMMAND: switch_tab("module1" | "module_fit" | "module2" | "module3" | "module4" | "crm")] -> Um den Reiter im Cockpit umzuschalten.
 - [SYSTEM_COMMAND: export_leads()] -> Um die CRM-Leads als CSV zu exportieren.
 - [SYSTEM_COMMAND: open_setup()] -> Um das Setup zu öffnen.
+- [SYSTEM_COMMAND: open_landingpage()] -> Um den KI-Landingpage-Generator zu öffnen.
+- [SYSTEM_COMMAND: generate_landingpage("Produkt", "Branche", "Zusatzanforderungen")] -> Um direkt eine Landingpage zu entwerfen.
 
 Beantworte seine Frage, hilf ihm bei Ergänzungen oder erstelle auf Wunsch neue E-Mails oder Gegenargumente. Antworte in strukturierter Markdown-Form, halte dich kurz, präzise und lösungsorientiert.
 `;
@@ -404,46 +407,42 @@ export function generateLocalMockData(industry, product) {
 }
 
 // --------------------------------------------------------------------------
-// Landing page generator
+// Landing page generator (Tailwind/glassmorphism design, GitHub-Pages ready)
 // --------------------------------------------------------------------------
-
-const LP_STYLE_GUIDANCE = {
-  "modern-minimal": "Modern und minimalistisch: viel Weißraum, ein Akzentfarbton (z.B. Indigo/Blau), klare serifenlose Typografie (System-Fonts), dezente Schatten, abgerundete Ecken.",
-  "corporate": "Seriös und corporate: gedeckte Farben (Navy, Grau, ein dezenter Blauton), klare Struktur, vertrauenswürdig wirkend, wenig Spielerei, gut lesbare Absätze.",
-  "bold": "Verspielt und auffällig: kräftiger Farbverlauf (z.B. Lila/Pink oder Orange/Rot), große Headlines, verspielte Icons/Emojis, viel visuelle Energie, aber trotzdem gut lesbar.",
-  "dark-premium": "Dunkel und premium: fast schwarzer Hintergrund, ein edler Akzent (Gold, Cyan oder Violett), hoher Kontrast, hochwertige/minimalistische Icons, Premium-Anmutung.",
-};
 
 /**
  * Builds the prompt sent to /api/generate for the landing page generator.
- * Instructs the model to return ONE self-contained HTML document (inline
- * CSS + vanilla JS only, no external dependencies) so the result can be
- * dropped straight into a GitHub Pages repo as index.html.
+ * Deliberately allows CDN-hosted Tailwind/Lucide/Google Fonts (that's the
+ * intended design language for this generator) - the trade-off is that the
+ * generated page needs internet access to render styled; that's called out
+ * to the user in the UI.
  */
-export function buildLandingPagePrompt({ productName, style, cta, prompt }) {
-  const styleGuidance = LP_STYLE_GUIDANCE[style] || LP_STYLE_GUIDANCE["modern-minimal"];
-  const name = productName || "das Produkt";
-  const ctaText = cta || "Jetzt starten";
+export function buildLandingPagePrompt(industry, product, customRequirements) {
+  return `
+Du bist ein weltklasse Frontend-Entwickler und Designer für B2B SaaS Landingpages.
+Erstelle eine hochprofessionelle, voll responsive und interaktive Single-Page Landingpage für folgendes Thema:
+- Zielbranche: ${industry}
+- B2B-Lösung/Produkt: ${product}
+${customRequirements ? `- Besondere Kundenanforderungen: ${customRequirements}` : ""}
 
-  return `Du bist eine erfahrene Webdesignerin und Frontend-Entwicklerin. Baue eine hochprofessionelle, vollständig funktionsfähige One-Page-Landingpage.
+DESIGN-RICHTLINIEN:
+- Verwende Tailwind CSS über CDN für erstklassiges, modernes Styling.
+- Verwende Lucide Icons über CDN (https://unpkg.com/lucide@latest) für saubere Symbole.
+- Binde Google Fonts (z.B. Inter) ein.
+- Nutze ein atemberaubendes Dark-Mode oder Glassmorphismus-Farbschema mit weichen Verläufen und modernen Schatten.
+- Das Design muss State-of-the-Art sein (kein Standard-Bootstrap-Look).
 
-PRODUKT / FIRMA: ${name}
-DESIGN-STIL: ${styleGuidance}
-HAUPT-CALL-TO-ACTION-TEXT: "${ctaText}"
+INTERAKTIVE MODULE (FUNKTIONEN):
+- Hero-Section mit markantem Pitch und CTA-Button.
+- Feature-Grid oder Pain-Point-Gegenüberstellung.
+- Ein funktionierendes, interaktives B2B-Kontaktformular (mit JS-Event, das bei Absenden eine schicke Erfolgsmeldung im DOM anzeigt, aber KEINE echten Daten irgendwohin sendet).
+- Ein voll funktionsfähiger ROI-Rechner oder Kosten-Rechner mit JavaScript, der auf dieser Seite interaktiv bedient werden kann.
+- FAQ-Accordion, das bei Klick flüssig aufklappt (mit JS gesteuert).
 
-BESCHREIBUNG / ANFORDERUNGEN DES NUTZERS:
-"""
-${prompt || "Erstelle eine überzeugende, generische B2B-SaaS-Landingpage mit Hero-Bereich, Feature-Übersicht, Social Proof und einer klaren Handlungsaufforderung."}
-"""
-
-HARTE TECHNISCHE ANFORDERUNGEN (unbedingt einhalten):
-1. Gib AUSSCHLIESSLICH ein einziges, vollständiges HTML-Dokument zurück, beginnend mit <!DOCTYPE html> und endend mit </html>. Kein Text davor oder danach, keine Markdown-Codeblock-Marker (\`\`\`).
-2. Alles muss in dieser einen Datei enthalten sein: CSS in einem <style>-Tag im <head>, JavaScript (falls nötig, z.B. für ein mobiles Menü oder sanftes Scrollen) in einem <script>-Tag vor </body>. Keine externen Stylesheets, Frameworks oder CDN-Links (kein Tailwind-CDN, kein Bootstrap, keine Google Fonts-Links) - nutze ausschließlich Systemschriften.
-3. Die Seite muss vollständig responsive sein (Mobile, Tablet, Desktop) mit sauberem CSS (Flexbox/Grid, KEINE externen Bilder/Icon-Fonts - falls Icons gewünscht sind, nutze einfache Inline-SVGs oder Unicode-Symbole/Emojis).
-4. Struktur: Navigation mit Logo/Produktname, Hero-Sektion mit Headline, Subheadline und einem auffälligen CTA-Button ("${ctaText}"), 3-4 Feature-/Vorteils-Boxen, ein Abschnitt mit sozialem Beweis (z.B. ein Testimonial-Zitat oder Kennzahlen), ein abschließender CTA-Bereich, und ein schlichter Footer.
-5. Nutze semantisches HTML (header, main, section, footer), sinnvolle Überschriften-Hierarchie und ausreichend Farbkontrast für Barrierefreiheit.
-6. Alle Buttons/Links dürfen auf "#" oder Anker innerhalb der Seite verweisen, da dies eine eigenständige Demo-Seite ist.
-7. Schreibe alle sichtbaren Texte auf Deutsch, professionell und überzeugend, passend zur Beschreibung oben.`;
+AUSGABE-REGELN:
+Gib AUSSCHLIESSLICH den vollständigen, nackten HTML-Code der Landingpage zurück.
+Schreibe keinerlei Erklärungen vor oder nach dem Code. Verwende keine Markdown-Codeblocks (\`\`\`html).
+`;
 }
 
 /**
@@ -473,99 +472,253 @@ export function extractHtmlFromResponse(rawText) {
   return extracted;
 }
 
-const LP_MOCK_PALETTES = {
-  "modern-minimal": { bg: "#ffffff", text: "#1a1a2e", accent: "#4f46e5", accentText: "#ffffff", muted: "#6b7280", surface: "#f5f6fb" },
-  "corporate": { bg: "#ffffff", text: "#1f2937", accent: "#1d4ed8", accentText: "#ffffff", muted: "#4b5563", surface: "#f1f5f9" },
-  "bold": { bg: "#1a0b2e", text: "#ffffff", accent: "#ec4899", accentText: "#ffffff", muted: "#d1c4e9", surface: "#2a1250" },
-  "dark-premium": { bg: "#0a0a0a", text: "#f5f5f5", accent: "#d4af37", accentText: "#0a0a0a", muted: "#a3a3a3", surface: "#151515" },
-};
-
 /**
- * Offline fallback: builds a complete, self-contained landing page HTML
- * document locally (no API key needed) using the same inputs, so the
- * feature always produces something usable.
+ * Offline fallback: builds the same Tailwind/glassmorphism landing page
+ * locally (no API key needed), so the feature always produces something
+ * usable. NOTE: the original version of this template had every `${...}`
+ * written as `\${...}` inside the returned string, which escapes the `$`
+ * and stops JS from interpolating it - the page literally showed the text
+ * "${cleanProd}" instead of the product name. Fixed here.
  */
-export function generateLocalMockLandingPage({ productName, style, cta, prompt }) {
-  const palette = LP_MOCK_PALETTES[style] || LP_MOCK_PALETTES["modern-minimal"];
-  const name = productName || "Dein Produkt";
-  const ctaText = cta || "Jetzt starten";
-  const description = (prompt || "").trim();
-  const subheadline = description
-    ? description.split(/[.\n]/)[0].trim().substring(0, 140)
-    : "Die smarte Lösung für dein Team - schneller, einfacher, effizienter.";
-
-  const features = [
-    { title: "Schnell startklar", text: "In wenigen Minuten eingerichtet, ohne komplizierte Konfiguration." },
-    { title: "Made for Teams", text: "Gebaut für den täglichen Einsatz - intuitiv für dein ganzes Team." },
-    { title: "Messbare Ergebnisse", text: "Transparente Kennzahlen, die den Mehrwert sofort sichtbar machen." },
-  ];
+export function generateMockLandingpageHTML(product, industry, customRequirements) {
+  const cleanProd = product || "Premium B2B-Lösung";
+  const cleanInd = industry || "B2B-Unternehmen";
 
   return `<!DOCTYPE html>
-<html lang="de">
+<html lang="de" class="scroll-smooth">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${name}</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: ${palette.bg}; color: ${palette.text}; line-height: 1.6; }
-  a { color: inherit; }
-  .container { max-width: 1100px; margin: 0 auto; padding: 0 1.5rem; }
-  header { display: flex; justify-content: space-between; align-items: center; padding: 1.25rem 0; }
-  header .logo { font-weight: 700; font-size: 1.2rem; }
-  nav a { margin-left: 1.5rem; text-decoration: none; color: ${palette.muted}; font-size: 0.9rem; }
-  .btn { display: inline-block; background: ${palette.accent}; color: ${palette.accentText}; padding: 0.85rem 1.75rem; border-radius: 8px; text-decoration: none; font-weight: 600; border: none; cursor: pointer; font-size: 1rem; }
-  .hero { text-align: center; padding: 5rem 0 4rem; }
-  .hero h1 { font-size: clamp(2rem, 5vw, 3.2rem); font-weight: 800; margin-bottom: 1.25rem; }
-  .hero p { font-size: 1.15rem; color: ${palette.muted}; max-width: 640px; margin: 0 auto 2rem; }
-  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; padding: 3rem 0; }
-  .feature-card { background: ${palette.surface}; border-radius: 12px; padding: 1.75rem; }
-  .feature-card h3 { margin-bottom: 0.5rem; font-size: 1.1rem; }
-  .feature-card p { color: ${palette.muted}; font-size: 0.95rem; }
-  .testimonial { text-align: center; padding: 4rem 1.5rem; background: ${palette.surface}; margin: 2rem 0; border-radius: 16px; }
-  .testimonial blockquote { font-size: 1.3rem; font-style: italic; max-width: 640px; margin: 0 auto 1rem; }
-  .testimonial cite { color: ${palette.muted}; font-size: 0.9rem; }
-  .cta-section { text-align: center; padding: 4rem 0; }
-  .cta-section h2 { font-size: 1.8rem; margin-bottom: 1.5rem; }
-  footer { text-align: center; padding: 2rem 0; color: ${palette.muted}; font-size: 0.85rem; border-top: 1px solid rgba(128,128,128,0.2); }
-  @media (max-width: 600px) { nav { display: none; } }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${cleanProd} - Die Premium-Lösung für ${cleanInd}</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+  </style>
 </head>
-<body>
-  <div class="container">
-    <header>
-      <div class="logo">${name}</div>
-      <nav>
-        <a href="#features">Funktionen</a>
-        <a href="#testimonial">Referenzen</a>
-        <a href="#cta">Kontakt</a>
+<body class="bg-[#0b0f19] text-gray-100 min-h-screen selection:bg-pink-500 selection:text-white">
+
+  <!-- Glow effects -->
+  <div class="fixed -top-40 -left-40 w-96 h-96 bg-pink-500/10 rounded-full blur-3xl pointer-events-none"></div>
+  <div class="fixed top-1/2 -right-40 w-96 h-96 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+  <!-- Header / Navigation -->
+  <header class="border-b border-gray-800 bg-[#0b0f19]/80 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
+      <div class="flex items-center gap-2">
+        <i data-lucide="zap" class="text-pink-500 w-6 h-6"></i>
+        <span class="font-extrabold text-xl tracking-tight bg-gradient-to-r from-pink-500 to-cyan-400 bg-clip-text text-transparent">ORBIT LABS</span>
+      </div>
+      <nav class="hidden md:flex gap-8 text-sm font-medium text-gray-400">
+        <a href="#features" class="hover:text-white transition-colors">Vorteile</a>
+        <a href="#roi" class="hover:text-white transition-colors">ROI-Rechner</a>
+        <a href="#faq" class="hover:text-white transition-colors">FAQ</a>
       </nav>
-    </header>
+      <a href="#kontakt" class="bg-gradient-to-r from-pink-500 to-cyan-500 hover:opacity-90 text-white font-semibold text-sm px-5 py-2.5 rounded-lg transition-all shadow-lg shadow-pink-500/15">
+        Jetzt anfragen
+      </a>
+    </div>
+  </header>
 
-    <section class="hero">
-      <h1>${name}</h1>
-      <p>${subheadline}</p>
-      <a class="btn" href="#cta">${ctaText}</a>
-    </section>
+  <!-- Hero Section -->
+  <section class="max-w-6xl mx-auto px-6 py-20 md:py-32 text-center relative">
+    <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-pink-500/20 bg-pink-500/5 text-pink-400 text-xs font-semibold tracking-wide uppercase mb-6">
+      <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Exklusiv für ${cleanInd}
+    </div>
+    <h1 class="text-4xl md:text-6xl font-black tracking-tight leading-tight mb-6 max-w-4xl mx-auto">
+      Mehr Effizienz. Weniger Aufwand. Mit <span class="bg-gradient-to-r from-pink-500 via-purple-400 to-cyan-400 bg-clip-text text-transparent">${cleanProd}</span>
+    </h1>
+    <p class="text-lg md:text-xl text-gray-400 mb-10 max-w-2xl mx-auto leading-relaxed">
+      Speziell entwickelt für die Anforderungen im Sektor ${cleanInd}. Erreiche messbaren Erfolg und senke deine Betriebskosten ab Tag 1.
+    </p>
+    <div class="flex flex-col sm:flex-row gap-4 justify-center items-center">
+      <a href="#kontakt" class="w-full sm:w-auto bg-gradient-to-r from-pink-500 to-cyan-500 hover:scale-[1.02] text-white font-bold text-base px-8 py-4 rounded-xl transition-all shadow-xl shadow-pink-500/20">
+        Kostenloses Erstgespräch buchen
+      </a>
+      <a href="#roi" class="w-full sm:w-auto border border-gray-700 hover:border-gray-500 bg-gray-900/50 text-gray-300 font-semibold text-base px-8 py-4 rounded-xl transition-all">
+        ROI berechnen
+      </a>
+    </div>
+  </section>
 
-    <section class="features" id="features">
-      ${features.map(f => `<div class="feature-card"><h3>${f.title}</h3><p>${f.text}</p></div>`).join("\n      ")}
-    </section>
+  <!-- Features Grid -->
+  <section id="features" class="max-w-6xl mx-auto px-6 py-20 border-t border-gray-800/80">
+    <div class="text-center mb-16">
+      <h2 class="text-3xl font-bold tracking-tight mb-4">Deine B2B-Vorteile auf einen Blick</h2>
+      <p class="text-gray-400 max-w-xl mx-auto">Warum Marktführer im Bereich ${cleanInd} auf unsere B2B-Lösung setzen.</p>
+    </div>
+    <div class="grid md:grid-cols-3 gap-8">
+      <div class="p-8 rounded-2xl border border-gray-800 bg-[#0f1424]/40 backdrop-blur-sm hover:border-pink-500/20 transition-all group">
+        <div class="w-12 h-12 rounded-xl bg-pink-500/10 flex items-center justify-center text-pink-500 mb-6 group-hover:bg-pink-500 group-hover:text-white transition-all">
+          <i data-lucide="trending-up" class="w-6 h-6"></i>
+        </div>
+        <h3 class="font-bold text-xl mb-3">Maximale Rendite</h3>
+        <p class="text-gray-400 text-sm leading-relaxed">Automatisierte Workflows und modernste B2B-Features sparen Zeit und Ressourcen ab der ersten Stunde.</p>
+      </div>
+      <div class="p-8 rounded-2xl border border-gray-800 bg-[#0f1424]/40 backdrop-blur-sm hover:border-cyan-500/20 transition-all group">
+        <div class="w-12 h-12 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-400 mb-6 group-hover:bg-cyan-500 group-hover:text-white transition-all">
+          <i data-lucide="shield-check" class="w-6 h-6"></i>
+        </div>
+        <h3 class="font-bold text-xl mb-3">Sicher & Konform</h3>
+        <p class="text-gray-400 text-sm leading-relaxed">Höchste Sicherheitsstandards, DSGVO-konform und jederzeit ausfallsicher für dein Business.</p>
+      </div>
+      <div class="p-8 rounded-2xl border border-gray-800 bg-[#0f1424]/40 backdrop-blur-sm hover:border-purple-500/20 transition-all group">
+        <div class="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 mb-6 group-hover:bg-purple-500 group-hover:text-white transition-all">
+          <i data-lucide="rocket" class="w-6 h-6"></i>
+        </div>
+        <h3 class="font-bold text-xl mb-3">Schnelle Integration</h3>
+        <p class="text-gray-400 text-sm leading-relaxed">Dank unserer modernen Cloud-Architektur und Schnittstellen in Rekordzeit in deinem Betrieb einsatzbereit.</p>
+      </div>
+    </div>
+  </section>
 
-    <section class="testimonial" id="testimonial">
-      <blockquote>"Seit wir ${name} einsetzen, sparen wir jede Woche mehrere Stunden Arbeit."</blockquote>
-      <cite>- Zufriedene Kundin</cite>
-    </section>
+  <!-- Interactive ROI Calculator Section -->
+  <section id="roi" class="max-w-4xl mx-auto px-6 py-20 border-t border-gray-800/80">
+    <div class="p-8 md:p-12 rounded-3xl border border-gray-800 bg-gradient-to-b from-[#0f1424]/80 to-[#070b13] relative overflow-hidden">
+      <div class="absolute top-0 right-0 w-64 h-64 bg-cyan-500/5 rounded-full blur-2xl pointer-events-none"></div>
 
-    <section class="cta-section" id="cta">
-      <h2>Bereit loszulegen?</h2>
-      <a class="btn" href="#">${ctaText}</a>
-    </section>
+      <div class="text-center mb-10">
+        <span class="text-cyan-400 font-semibold text-sm uppercase tracking-wider mb-2 block">Wertrechner</span>
+        <h2 class="text-2xl md:text-3xl font-extrabold">Berechne deine jährliche Ersparnis</h2>
+        <p class="text-gray-400 text-sm mt-2">Berechne live den finanziellen ROI für dein Unternehmen.</p>
+      </div>
 
-    <footer>
-      &copy; ${new Date().getFullYear()} ${name}. Alle Rechte vorbehalten. (Offline-Demo-Vorschau)
-    </footer>
-  </div>
+      <div class="grid md:grid-cols-2 gap-8 items-center">
+        <div class="space-y-6 text-left">
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Anzahl Mitarbeiter / Nutzer</label>
+            <input type="number" id="roi-users" value="25" min="1" class="w-full bg-[#070b13] border border-gray-800 focus:border-cyan-500 rounded-xl px-4 py-3 text-white font-semibold outline-none transition-all">
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Bisherige manuelle Arbeitsstunden (pro Mitarbeiter & Woche)</label>
+            <input type="number" id="roi-hours" value="4" min="0" class="w-full bg-[#070b13] border border-gray-800 focus:border-cyan-500 rounded-xl px-4 py-3 text-white font-semibold outline-none transition-all">
+          </div>
+          <button onclick="calculateInteractiveROI()" class="w-full bg-[#0f1424] hover:bg-[#182038] text-cyan-400 font-bold py-3 rounded-xl transition-all border border-cyan-500/20">
+            Ersparnis neu berechnen
+          </button>
+        </div>
+
+        <div class="p-8 rounded-2xl bg-cyan-500/5 border border-cyan-500/20 text-center flex flex-col justify-center h-full">
+          <span class="text-gray-400 text-sm font-medium mb-1">Deine geschätzte jährliche Ersparnis</span>
+          <span id="roi-result" class="text-4xl md:text-5xl font-black text-cyan-400 my-4">€ 24.000</span>
+          <span class="text-xs text-gray-500 leading-relaxed">Kalkuliert auf Basis von € 40,- Stundensatz inkl. Lohnnebenkosten durch Effizienzgewinn von 50% mit ${cleanProd}.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ Section (Accordion) -->
+  <section id="faq" class="max-w-3xl mx-auto px-6 py-20 border-t border-gray-800/80 text-left">
+    <div class="text-center mb-16">
+      <h2 class="text-3xl font-bold tracking-tight mb-4">Häufig gestellte Fragen</h2>
+      <p class="text-gray-400">Schnelle Antworten auf die wichtigsten Fragen.</p>
+    </div>
+    <div class="space-y-4">
+      <div class="border border-gray-800 rounded-xl bg-[#0f1424]/30 overflow-hidden">
+        <button onclick="toggleFaq(this)" class="w-full px-6 py-4 flex justify-between items-center hover:bg-gray-800/25 transition-colors">
+          <span class="font-semibold text-base">Wie funktioniert die Einführung von ${cleanProd}?</span>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-gray-400 transition-transform"></i>
+        </button>
+        <div class="hidden px-6 py-4 border-t border-gray-800/80 text-gray-400 text-sm leading-relaxed">
+          Unser Onboarding-Team richtet das System innerhalb von wenigen Tagen für dich ein. Es ist keine komplexe IT-Infrastruktur vor Ort erforderlich.
+        </div>
+      </div>
+      <div class="border border-gray-800 rounded-xl bg-[#0f1424]/30 overflow-hidden">
+        <button onclick="toggleFaq(this)" class="w-full px-6 py-4 flex justify-between items-center hover:bg-gray-800/25 transition-colors">
+          <span class="font-semibold text-base">Gibt es eine Vertragslaufzeit?</span>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-gray-400 transition-transform"></i>
+        </button>
+        <div class="hidden px-6 py-4 border-t border-gray-800/80 text-gray-400 text-sm leading-relaxed">
+          Wir bieten flexible monatliche Lizenzen sowie rabattierte Jahresverträge an. Du kannst dein Paket jederzeit anpassen oder erweitern.
+        </div>
+      </div>
+      <div class="border border-gray-800 rounded-xl bg-[#0f1424]/30 overflow-hidden">
+        <button onclick="toggleFaq(this)" class="w-full px-6 py-4 flex justify-between items-center hover:bg-gray-800/25 transition-colors">
+          <span class="font-semibold text-base">Ist die Lösung DSGVO-konform?</span>
+          <i data-lucide="chevron-down" class="w-5 h-5 text-gray-400 transition-transform"></i>
+        </button>
+        <div class="hidden px-6 py-4 border-t border-gray-800/80 text-gray-400 text-sm leading-relaxed">
+          Ja! Alle Daten werden verschlüsselt auf Servern innerhalb der EU verarbeitet und entsprechen vollumfänglich den Vorgaben der DSGVO.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Contact Form Section -->
+  <section id="kontakt" class="max-w-xl mx-auto px-6 py-20 border-t border-gray-800/80">
+    <div class="text-center mb-10">
+      <h2 class="text-3xl font-bold tracking-tight mb-2">Unverbindlich anfragen</h2>
+      <p class="text-gray-400 text-sm">Trage dich ein und unser B2B-Experte meldet sich innerhalb von 24 Stunden bei dir.</p>
+    </div>
+
+    <form onsubmit="handleDemoContact(event)" class="space-y-4 text-left">
+      <div>
+        <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Firmenname</label>
+        <input type="text" required class="w-full bg-[#0f1424]/50 border border-gray-800 focus:border-pink-500 rounded-xl px-4 py-3 text-white outline-none transition-all">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Dein Name</label>
+        <input type="text" required class="w-full bg-[#0f1424]/50 border border-gray-800 focus:border-pink-500 rounded-xl px-4 py-3 text-white outline-none transition-all">
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">E-Mail-Adresse</label>
+        <input type="email" required class="w-full bg-[#0f1424]/50 border border-gray-800 focus:border-pink-500 rounded-xl px-4 py-3 text-white outline-none transition-all">
+      </div>
+      <div id="contact-success" class="hidden p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded-xl text-sm font-medium">
+        ✓ Vielen Dank! Deine Anfrage wurde erfolgreich gesendet. Wir melden uns umgehend bei dir.
+      </div>
+      <button type="submit" class="w-full bg-gradient-to-r from-pink-500 to-cyan-500 hover:opacity-95 text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-pink-500/10">
+        Jetzt B2B-Beratung anfordern
+      </button>
+    </form>
+  </section>
+
+  <!-- Footer -->
+  <footer class="border-t border-gray-800 bg-[#070b13] py-8 text-center text-xs text-gray-600">
+    <div class="max-w-6xl mx-auto px-6">
+      <p class="mb-2">© 2026 Orbit Labs. Alle Rechte vorbehalten. Erstellt mit dem KI Landingpage-Generator.</p>
+      <p>Diese Landingpage ist bereit für die Veröffentlichung auf GitHub Pages.</p>
+    </div>
+  </footer>
+
+  <!-- Scripts -->
+  <script>
+    lucide.createIcons();
+
+    function calculateInteractiveROI() {
+      const users = parseInt(document.getElementById('roi-users').value) || 0;
+      const hours = parseInt(document.getElementById('roi-hours').value) || 0;
+      const savings = Math.round(users * hours * 52 * 40 * 0.5); // 50% savings, 52 weeks, € 40 hourly rate
+
+      const formatted = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(savings);
+      document.getElementById('roi-result').innerText = formatted;
+    }
+
+    function toggleFaq(button) {
+      const content = button.nextElementSibling;
+      const icon = button.querySelector('i');
+
+      if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        if (icon) icon.style.transform = 'rotate(180deg)';
+      } else {
+        content.classList.add('hidden');
+        if (icon) icon.style.transform = '';
+      }
+    }
+
+    function handleDemoContact(event) {
+      event.preventDefault();
+      document.getElementById('contact-success').classList.remove('hidden');
+      event.target.reset();
+    }
+  </script>
 </body>
 </html>`;
 }
@@ -678,6 +831,7 @@ export function generateLocalMockLeads(product, region, industry) {
       contact: `${firstName} ${lastName} (${pos})`,
       email: email,
       phone: phone,
+      potenzial: i % 3 === 0 ? "Hoch" : (i % 3 === 1 ? "Mittel" : "Gering"),
       industry: i % 4 === 0 ? "Dienstleistungen" : (i % 4 === 1 ? "Technologie" : (i % 4 === 2 ? "Handel" : cleanInd)),
       website: website,
       notes: notes

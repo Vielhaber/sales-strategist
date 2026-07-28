@@ -437,7 +437,7 @@ Beste Grüße
   }
 };
 
-// Exposed explicitly on window so the ES module app.js (loaded as
-// type="module", which has its own scope) can read it without relying on
-// implicit global-scope sharing between classic and module scripts.
+// Expose to the global scope so the ES-module app.js (loaded with
+// `type="module"`, which does not share top-level `const` bindings with
+// classic scripts) can read the prepackaged demo data.
 window.PREPACKAGED_DEMOS = PREPACKAGED_DEMOS;
